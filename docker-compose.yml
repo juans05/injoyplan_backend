@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: injoyplan-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-injoyplan}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-injoyplan123}
+      POSTGRES_DB: ${DB_NAME:-injoyplan}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-injoyplan}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NestJS Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: injoyplan-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4201
+      DATABASE_URL: postgresql://${DB_USER:-injoyplan}:${DB_PASSWORD:-injoyplan123}@db:5432/${DB_NAME:-injoyplan}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      # Add other env variables as needed
+    ports:
+      - "4201:4201"
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/main.js"
+
+volumes:
+  postgres_data:

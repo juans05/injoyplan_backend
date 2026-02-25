@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "openssl"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm exec prisma generate", "pnpm run build"]
+
+[start]
+cmd = "echo '----- STARTING DB PUSH -----' && npx prisma db push --accept-data-loss && echo '----- DB PUSH FINISHED -----' && node dist/src/main.js"

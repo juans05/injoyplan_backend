@@ -1,0 +1,375 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserType {
+  NORMAL
+  COMPANY
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum PostLikeType {
+  LIKE
+  LOVE
+}
+
+enum ChatRoomType {
+  INDIVIDUAL
+  GROUP
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  username        String?  @unique // Added for profile
+  password        String
+  userType        UserType @default(NORMAL)
+  role            Role     @default(USER)
+  isVerified      Boolean  @default(false)
+  verificationToken String?
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile         Profile?
+  events          Event[]
+  posts           Post[]
+  postLikes       PostLike[]
+  favorites       Favorite[]
+  eventComments   EventComment[]
+  commentLikes    EventCommentLike[]
+  sentMessages    Message[] @relation("SentMessages")
+  chatParticipants ChatParticipant[]
+  followers       Follow[] @relation("Following")
+  following       Follow[] @relation("Follower")
+  friendshipsInitiated Friendship[] @relation("UserInitiated")
+  friendshipsReceived  Friendship[] @relation("FriendReceived")
+
+  @@map("users")
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatar      String?
+  coverImage  String?
+  description String?  @db.Text
+  firstName   String?
+  lastName    String?
+  phone       String?
+  city        String?
+  country     String?
+  gender      String?
+  birthDate   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Friendship {
+  id        String           @id @default(uuid())
+  userId    String
+  friendId  String
+  status    FriendshipStatus @default(PENDING)
+  user      User             @relation("UserInitiated", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User             @relation("FriendReceived", fields: [friendId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, friendId])
+  @@map("friendships")
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  imageUrl  String?
+  likes     PostLike[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("posts")
+}
+
+model PostLike {
+  id        String       @id @default(uuid())
+  userId    String
+  postId    String
+  type      PostLikeType @default(LIKE)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, postId])
+  @@map("post_likes")
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @db.Text
+  category    String
+  imageUrl    String?
+  bannerUrl   String?
+  websiteUrl  String?  // URL externa del evento (legacy, single link)
+  ticketUrls  Json?    // Array of {name: string, url: string} for multiple links
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  isBanner    Boolean  @default(false)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  dates       EventDate[]
+  favorites   Favorite[]
+  comments    EventComment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([isBanner])
+  @@index([category])
+  @@index([isActive, isFeatured])
+  @@map("events")
+}
+
+model EventDate {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  date      DateTime
+  startTime String?
+  endTime   String?
+  price     Float?
+  capacity  Int?
+  createdAt DateTime @default(now())
+  favorites Favorite[]
+
+  @@index([eventId])
+  @@index([date])
+  @@index([price])
+  @@index([startTime])
+  @@map("event_dates")
+}
+
+model Location {
+  id          String  @id @default(uuid())
+  name        String? // Stores venue name e.g. "Teatro Municipal"
+  department  String
+  province    String
+  district    String
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  events      Event[]
+  
+  @@index([department])
+  @@index([province])
+  @@index([district])
+  @@map("locations")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  eventId   String
+  eventDateId String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventDate EventDate? @relation(fields: [eventDateId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, eventId, eventDateId])
+  @@map("favorites")
+}
+
+model EventComment {
+  id        String   @id @default(uuid())
+  eventId   String
+  userId    String
+  content   String   @db.Text
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    EventComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   EventComment[] @relation("CommentReplies")
+  likes     EventCommentLike[]
+
+  @@index([eventId])
+  @@map("event_comments")
+}
+
+model EventCommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   EventComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, commentId])
+  @@map("event_comment_likes")
+}
+
+model ChatRoom {
+  id          String           @id @default(uuid())
+  type        ChatRoomType
+  name        String?
+  participants ChatParticipant[]
+  messages    Message[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@map("chat_rooms")
+}
+
+model ChatParticipant {
+  id         String   @id @default(uuid())
+  chatRoomId String
+  userId     String
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt   DateTime @default(now())
+
+  @@unique([chatRoomId, userId])
+  @@map("chat_participants")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  chatRoomId String?
+  senderId   String
+  receiverId String?
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  chatRoom   ChatRoom? @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@map("messages")
+}
+
+model Complaint {
+  id        String   @id @default(uuid())
+  
+  // Consumer Data
+  consumerName       String
+  consumerDocType    String
+  consumerDocNumber  String
+  consumerAddress    String
+  consumerDepartment String
+  consumerProvince   String
+  consumerDistrict   String
+  consumerPhone      String
+  consumerEmail      String
+
+  // Minor / Representative Data
+  isMinor            Boolean @default(false)
+  repName            String?
+  repDocType         String?
+  repDocNumber       String?
+  repAddress         String?
+  repDepartment      String?
+  repProvince        String?
+  repDistrict        String?
+  repPhone           String?
+  repEmail           String?
+
+  // Contracted Good Data
+  goodType           String // PRODUCTO, SERVICIO
+  claimAmount        Decimal? @db.Decimal(10, 2)
+  goodDescription    String @db.Text
+
+  // Claim Detail
+  claimType          String // RECLAMO, QUEJA
+  claimDetail        String @db.Text
+  orderRequest       String @db.Text // Detalle del pedido
+
+  createdAt DateTime @default(now())
+
+  @@map("complaints")
+}
+
+model Banner {
+  id          String   @id @default(uuid())
+  title       String
+  imageUrl    String
+  link        String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+
+  // New fields
+  urlFuente   String?
+  horaInicio  String?
+  horaFin     String?
+  fecha       DateTime?
+  direccion   String?
+  idRow       String?
+  categoria   String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("banners")
+}
+
+model Newsletter {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("newsletter")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  icon        String
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("categories")
+}
