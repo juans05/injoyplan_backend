@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { CacheModule } from '@nestjs/cache-manager';
-import { redisStore } from 'cache-manager-redis-yet';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -25,17 +23,6 @@ import { ContactModule } from './contact/contact.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-    }),
-    // Caching
-    CacheModule.registerAsync({
-      isGlobal: true,
-      useFactory: async (configService: ConfigService) => ({
-        store: await redisStore({
-          url: configService.get('REDIS_URL') || 'redis://localhost:6379',
-          ttl: 60000, // 1 minute default
-        }),
-      }),
-      inject: [ConfigService],
     }),
     // Rate limiting
     ThrottlerModule.forRoot([{
@@ -61,3 +48,4 @@ import { ContactModule } from './contact/contact.module';
   providers: [AppService],
 })
 export class AppModule { }
+
